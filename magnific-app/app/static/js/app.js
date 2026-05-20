@@ -102,7 +102,8 @@ function renderForm(schema) {
         } else if (field.type === "file") {
             group.innerHTML = `
                 <label>${field.label}${field.required ? '<span class="required">*</span>' : ''}</label>
-                <input type="file" name="${key}" accept="${field.accept || '*'}" ${field.required ? 'required' : ''}>
+                <input type="file" name="${key}" accept="${field.accept || '*'}" ${field.required ? 'required' : ''} class="standalone-file-input">
+                <div class="file-upload-feedback" data-feedback="${key}"></div>
                 ${field.help ? `<div class="help-text">${field.help}</div>` : ''}
             `;
         } else if (field.type === "url_or_file") {
@@ -188,6 +189,7 @@ function renderForm(schema) {
     document.getElementById("result-container").style.display = "none";
     updateFieldVisibility();
     initUrlFileToggles(form);
+    initStandaloneFileInputs(form);
 }
 
 function initUrlFileToggles(form) {
@@ -282,8 +284,60 @@ function initUrlFileToggles(form) {
                         <span class="file-size">${sizeStr}</span>
                     </div>
                 `;
+
+                fetch(`${API_BASE}/api/log-file-upload`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        field: fieldKey,
+                        filename: file.name,
+                        size: file.size,
+                        content_type: file.type || "",
+                    }),
+                }).catch(() => {});
             } else {
                 clearFileFeedback(fieldKey);
+            }
+        });
+    });
+}
+
+function initStandaloneFileInputs(form) {
+    form.querySelectorAll(".standalone-file-input").forEach(input => {
+        input.addEventListener("change", () => {
+            const fieldKey = input.name;
+            const feedback = form.querySelector(`.file-upload-feedback[data-feedback="${fieldKey}"]`);
+
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                const size = file.size;
+                let sizeStr;
+                if (size > 1048576) sizeStr = `${(size / 1048576).toFixed(1)} MB`;
+                else if (size > 1024) sizeStr = `${(size / 1024).toFixed(0)} KB`;
+                else sizeStr = `${size} B`;
+
+                if (feedback) {
+                    feedback.innerHTML = `
+                        <div class="file-upload-success">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            <span class="file-name">${escapeHtml(file.name)}</span>
+                            <span class="file-size">${sizeStr}</span>
+                        </div>
+                    `;
+                }
+
+                fetch(`${API_BASE}/api/log-file-upload`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        field: fieldKey,
+                        filename: file.name,
+                        size: file.size,
+                        content_type: file.type || "",
+                    }),
+                }).catch(() => {});
+            } else {
+                if (feedback) feedback.innerHTML = "";
             }
         });
     });

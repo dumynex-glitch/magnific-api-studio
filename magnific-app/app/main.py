@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 import os
 import time
 import logging
@@ -41,6 +42,24 @@ async def verify_url(url: str):
     except httpx.RequestError as e:
         log_store.add(f"URL verification error: {str(e)}", "error", "verify")
         return {"ok": False, "error": str(e)}
+
+
+class FileUploadLog(BaseModel):
+    field: str
+    filename: str
+    size: int
+    content_type: str = ""
+
+
+@app.post("/api/log-file-upload")
+async def log_file_upload(data: FileUploadLog):
+    size_str = f"{data.size} bytes"
+    if data.size > 1048576:
+        size_str = f"{data.size / 1048576:.1f} MB"
+    elif data.size > 1024:
+        size_str = f"{data.size / 1024:.0f} KB"
+    log_store.add(f"File selected: {data.field}={data.filename} ({size_str})", "info", "upload")
+    return {"ok": True}
 
 
 class RateLimiter:
