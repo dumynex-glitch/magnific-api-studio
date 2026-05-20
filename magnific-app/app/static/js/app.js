@@ -653,7 +653,7 @@ document.getElementById("settings-overlay").addEventListener("click", closeSetti
 
 let lastLogId = 0;
 let logPollInterval = null;
-let logPanelExpanded = false;
+let logPanelVisible = true;
 
 function startLogPolling() {
     if (logPollInterval) clearInterval(logPollInterval);
@@ -695,7 +695,7 @@ function appendLogEntries(entries) {
     const totalEntries = container.children.length;
     countEl.textContent = totalEntries;
 
-    if (wasAtBottom || logPanelExpanded) {
+    if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     }
 }
@@ -707,12 +707,11 @@ function escapeHtml(text) {
 }
 
 document.getElementById("log-toggle-btn").addEventListener("click", () => {
-    logPanelExpanded = !logPanelExpanded;
-    const body = document.getElementById("log-panel-body");
+    logPanelVisible = !logPanelVisible;
+    const panel = document.getElementById("log-panel");
     const chevron = document.querySelector(".log-chevron");
-    body.style.display = logPanelExpanded ? "block" : "none";
-    chevron.classList.toggle("expanded", logPanelExpanded);
-    if (logPanelExpanded) {
+    panel.classList.toggle("hidden-panel", !logPanelVisible);
+    if (logPanelVisible) {
         const container = document.getElementById("log-entries");
         container.scrollTop = container.scrollHeight;
     }

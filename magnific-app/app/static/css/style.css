@@ -989,6 +989,16 @@ select:disabled {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.log-panel.hidden-panel {
+    max-height: 42px;
+    overflow: hidden;
+}
+
+.log-panel.hidden-panel .log-panel-body {
+    display: none !important;
 }
 
 .log-panel-header {
@@ -1021,8 +1031,8 @@ select:disabled {
     transition: transform 0.2s;
 }
 
-.log-chevron.expanded {
-    transform: rotate(180deg);
+.log-panel:not(.hidden-panel) .log-chevron {
+    transform: rotate(0deg);
 }
 
 .log-count {
