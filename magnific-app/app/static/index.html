@@ -57,6 +57,18 @@
                         <h3>Result</h3>
                         <span class="status-badge" id="status-badge">PENDING</span>
                     </div>
+                    <div class="progress-section" id="progress-section" style="display:none;">
+                        <div class="progress-spinner">
+                            <div class="spinner"></div>
+                        </div>
+                        <div class="progress-details">
+                            <div class="progress-status" id="progress-status">Initializing...</div>
+                            <div class="progress-time">
+                                <span>Elapsed: <span id="elapsed-time">0s</span></span>
+                                <span class="progress-eta" id="progress-eta"></span>
+                            </div>
+                        </div>
+                    </div>
                     <div class="result-content" id="result-content"></div>
                     <div class="result-actions">
                         <button id="poll-btn" class="btn btn-primary" style="display:none;">Poll Status</button>

@@ -6,6 +6,8 @@ let currentModel = "";
 let currentTaskId = "";
 let pollInterval = null;
 let currentModelSchema = null;
+let taskStartTime = null;
+let elapsedInterval = null;
 
 async function loadRegistry() {
     try {
@@ -325,16 +327,30 @@ function showResult(result) {
     const content = document.getElementById("result-content");
     const badge = document.getElementById("status-badge");
     const pollBtn = document.getElementById("poll-btn");
+    const progressSection = document.getElementById("progress-section");
 
     container.style.display = "block";
     badge.textContent = result.status;
     badge.className = `status-badge ${result.status}`;
     content.innerHTML = `<p>Task ID: <code>${result.task_id}</code></p><p>Status: ${result.status}</p>`;
     pollBtn.style.display = result.status !== "COMPLETED" && result.status !== "FAILED" ? "inline-block" : "none";
+
+    if (result.status === "IN_PROGRESS" || result.status === "CREATED") {
+        progressSection.style.display = "flex";
+        taskStartTime = Date.now();
+        startElapsedTimer();
+        updateProgressStatus(result.status);
+    } else {
+        progressSection.style.display = "none";
+    }
 }
 
 function startPolling() {
     if (pollInterval) clearInterval(pollInterval);
+    const progressSection = document.getElementById("progress-section");
+    progressSection.style.display = "flex";
+    taskStartTime = Date.now();
+    startElapsedTimer();
     pollInterval = setInterval(async () => {
         await checkTaskStatus();
     }, 3000);
@@ -355,11 +371,17 @@ async function checkTaskStatus() {
         badge.textContent = result.status;
         badge.className = `status-badge ${result.status}`;
 
+        updateProgressStatus(result.status, result);
+
         if (result.status === "COMPLETED") {
             clearInterval(pollInterval);
+            stopElapsedTimer();
+            hideProgressSection();
             renderCompleted(result);
         } else if (result.status === "FAILED") {
             clearInterval(pollInterval);
+            stopElapsedTimer();
+            hideProgressSection();
             document.getElementById("result-content").innerHTML = `<p class="error">Task failed</p>`;
             document.getElementById("poll-btn").style.display = "none";
             showToast("Task failed", "error");
@@ -367,6 +389,74 @@ async function checkTaskStatus() {
     } catch (e) {
         console.error("Poll error:", e);
     }
+}
+
+function formatElapsedTime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+    }
+    return `${seconds}s`;
+}
+
+function startElapsedTimer() {
+    if (elapsedInterval) clearInterval(elapsedInterval);
+    const elapsedEl = document.getElementById("elapsed-time");
+    elapsedInterval = setInterval(() => {
+        if (taskStartTime) {
+            elapsedEl.textContent = formatElapsedTime(Date.now() - taskStartTime);
+        }
+    }, 1000);
+}
+
+function stopElapsedTimer() {
+    if (elapsedInterval) {
+        clearInterval(elapsedInterval);
+        elapsedInterval = null;
+    }
+}
+
+function updateProgressStatus(status, result) {
+    const statusEl = document.getElementById("progress-status");
+    const etaEl = document.getElementById("progress-eta");
+
+    const statusMessages = {
+        "CREATED": "Task created, waiting for processing...",
+        "IN_PROGRESS": "Generating your content, please wait...",
+        "QUEUED": "Task queued, waiting for available resources...",
+        "PROCESSING": "Processing in progress...",
+    };
+
+    statusEl.textContent = statusMessages[status] || `Status: ${status}`;
+
+    if (result && result.progress) {
+        const progress = typeof result.progress === "number" ? result.progress : null;
+        if (progress !== null && progress > 0) {
+            statusEl.textContent = `Generating... ${Math.round(progress)}%`;
+        }
+    }
+
+    if (taskStartTime) {
+        const elapsed = Date.now() - taskStartTime;
+        const elapsedSeconds = elapsed / 1000;
+        if (elapsedSeconds > 30 && status === "IN_PROGRESS") {
+            const estimatedTotal = elapsedSeconds * 1.5;
+            const remaining = Math.max(0, estimatedTotal - elapsedSeconds);
+            if (remaining > 10) {
+                etaEl.textContent = `~${formatElapsedTime(remaining * 1000)} remaining`;
+            } else {
+                etaEl.textContent = "Completing soon...";
+            }
+        } else {
+            etaEl.textContent = "";
+        }
+    }
+}
+
+function hideProgressSection() {
+    document.getElementById("progress-section").style.display = "none";
 }
 
 function renderCompleted(result) {
@@ -449,7 +539,10 @@ document.getElementById("poll-btn").addEventListener("click", checkTaskStatus);
 document.getElementById("new-task-btn").addEventListener("click", () => {
     document.getElementById("result-container").style.display = "none";
     if (pollInterval) clearInterval(pollInterval);
+    if (elapsedInterval) clearInterval(elapsedInterval);
     currentTaskId = "";
+    taskStartTime = null;
+    hideProgressSection();
 });
 
 document.addEventListener("DOMContentLoaded", loadRegistry);
