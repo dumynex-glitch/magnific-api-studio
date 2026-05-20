@@ -144,10 +144,13 @@ async def generate(
             content = await upload.read()
             files[key] = content
             files[f"{key}_filename"] = upload.filename or ""
-            uploaded_files.append(f"{key} ({len(content)} bytes)")
+            fname = upload.filename or "unknown"
+            uploaded_files.append(f"{key}={fname} ({len(content)} bytes)")
 
     if uploaded_files:
         log_store.add(f"Uploaded {len(uploaded_files)} file(s): {', '.join(uploaded_files)}", "info", "generation")
+    else:
+        log_store.add("No files uploaded (checking URL-based inputs in params)", "debug", "generation")
     log_store.add(f"Parameters: {json.dumps({k: v for k, v in params_dict.items() if k not in ('prompt',)})}", "debug", "generation")
     if x_magnific_api_key:
         log_store.add(f"Using custom API key: ...{x_magnific_api_key[-4:]}", "info", "generation")
