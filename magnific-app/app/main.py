@@ -6,6 +6,7 @@ import os
 import time
 import logging
 from collections import defaultdict
+from datetime import datetime, timezone
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,6 +17,35 @@ from app.routes.generate import router as generate_router
 from app.routes.webhooks import router as webhook_router
 
 app = FastAPI(title="Magnific API Studio", version="1.0.0")
+
+
+class LogStore:
+    def __init__(self, max_entries: int = 500):
+        self.entries: list[dict] = []
+        self.max_entries = max_entries
+        self._counter = 0
+
+    def add(self, message: str, level: str = "info", category: str = "system"):
+        self._counter += 1
+        entry = {
+            "id": self._counter,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": level,
+            "category": category,
+            "message": message,
+        }
+        self.entries.append(entry)
+        if len(self.entries) > self.max_entries:
+            self.entries = self.entries[-self.max_entries:]
+
+    def get_since(self, last_id: int) -> list[dict]:
+        return [e for e in self.entries if e["id"] > last_id]
+
+    def clear(self):
+        self.entries.clear()
+
+
+log_store = LogStore()
 
 
 class RateLimiter:
@@ -78,6 +108,15 @@ app.add_middleware(
 
 app.include_router(generate_router)
 app.include_router(webhook_router)
+
+@app.get("/api/logs")
+async def get_logs(last_id: int = 0):
+    return {"entries": log_store.get_since(last_id), "total": len(log_store.entries)}
+
+@app.post("/api/logs/clear")
+async def clear_logs():
+    log_store.clear()
+    return {"status": "cleared"}
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")

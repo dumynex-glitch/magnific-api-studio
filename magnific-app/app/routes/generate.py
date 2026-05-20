@@ -3,10 +3,12 @@ from typing import Optional
 import base64
 import json
 import logging
+from datetime import datetime, timezone
 
 from app.client import client, MagnificAPIError, MagnificRateLimitError, MagnificTimeoutError
 from app.registry import MODEL_REGISTRY
 from app.models import GenerateRequest, GenerateResponse, TaskStatusRequest, TaskStatusResponse, RegistryResponse, CategoryInfo, ModelInfo
+from app.main import log_store
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +21,17 @@ async def validate_key(request: Request):
     api_key = body.get("api_key", "")
     if not api_key:
         raise HTTPException(status_code=400, detail="API key is required")
+    log_store.add(f"Validating API key: ...{api_key[-4:]}", "info", "settings")
     try:
         result = await client.validate_key(api_key)
+        status_code = result.get("status_code", 0)
+        if 200 <= status_code < 300 or status_code == 400:
+            log_store.add(f"API key ...{api_key[-4:]} validated (HTTP {status_code})", "success", "settings")
+        else:
+            log_store.add(f"API key ...{api_key[-4:]} validation failed (HTTP {status_code})", "error", "settings")
         return result
     except Exception as e:
+        log_store.add(f"API key validation error: {str(e)}", "error", "settings")
         raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
 
@@ -97,6 +106,9 @@ async def generate(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid params JSON")
 
+    model_label = MODEL_REGISTRY[category]["models"][model]["label"]
+    log_store.add(f"Generate request received: {model_label} ({category}/{model})", "info", "generation")
+
     files = {}
     file_map = {
         "image": image,
@@ -126,28 +138,48 @@ async def generate(
         "minimax_image_url": minimax_image_url,
     }
 
+    uploaded_files = []
     for key, upload in file_map.items():
         if upload:
             content = await upload.read()
             files[key] = content
             files[f"{key}_filename"] = upload.filename or ""
+            uploaded_files.append(f"{key} ({len(content)} bytes)")
+
+    if uploaded_files:
+        log_store.add(f"Uploaded {len(uploaded_files)} file(s): {', '.join(uploaded_files)}", "info", "generation")
+    log_store.add(f"Parameters: {json.dumps({k: v for k, v in params_dict.items() if k not in ('prompt',)})}", "debug", "generation")
+    if x_magnific_api_key:
+        log_store.add(f"Using custom API key: ...{x_magnific_api_key[-4:]}", "info", "generation")
+    else:
+        log_store.add("Using default server API key", "info", "generation")
+
+    log_store.add(f"Calling Magnific API endpoint for {model_label}...", "info", "generation")
 
     try:
         result = await client.generate(category, model, params_dict, files, api_key=x_magnific_api_key)
     except MagnificRateLimitError as e:
+        log_store.add(f"Rate limited: {str(e)}", "error", "generation")
         raise HTTPException(status_code=429, detail=f"Rate limited: {str(e)}")
     except MagnificTimeoutError as e:
+        log_store.add(f"Request timeout: {str(e)}", "error", "generation")
         raise HTTPException(status_code=504, detail=f"Request timeout: {str(e)}")
     except MagnificAPIError as e:
+        log_store.add(f"Magnific API error ({e.status_code}): {str(e)}", "error", "generation")
         raise HTTPException(status_code=e.status_code or 502, detail=f"Magnific API error: {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error in generate: {e}", exc_info=True)
+        log_store.add(f"Unexpected error: {str(e)}", "error", "generation")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
     data = result.get("data", {})
+    task_id = data.get("task_id", "")
+    status = data.get("status", "UNKNOWN")
+    log_store.add(f"Task created: {task_id} (status: {status})", "success", "generation")
+
     return GenerateResponse(
-        task_id=data.get("task_id", ""),
-        status=data.get("status", "UNKNOWN"),
+        task_id=task_id,
+        status=status,
         category=category,
         model=model,
     )
@@ -196,20 +228,32 @@ async def get_task_status(
     try:
         result = await client.get_task_status(category, model, task_id, api_key=x_magnific_api_key)
     except MagnificRateLimitError as e:
+        log_store.add(f"Rate limited on task status: {str(e)}", "error", "polling")
         raise HTTPException(status_code=429, detail=f"Rate limited: {str(e)}")
     except MagnificTimeoutError as e:
+        log_store.add(f"Timeout on task status: {str(e)}", "error", "polling")
         raise HTTPException(status_code=504, detail=f"Request timeout: {str(e)}")
     except MagnificAPIError as e:
+        log_store.add(f"API error on task status ({e.status_code}): {str(e)}", "error", "polling")
         raise HTTPException(status_code=e.status_code or 502, detail=f"Magnific API error: {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error in get_task_status: {e}", exc_info=True)
+        log_store.add(f"Unexpected error on task status: {str(e)}", "error", "polling")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
     data = result.get("data", {})
+    status = data.get("status", "UNKNOWN")
+    generated = data.get("generated", [])
+    log_store.add(f"Task {task_id[:8]}... status: {status}", "info", "polling")
+    if status == "COMPLETED" and generated:
+        log_store.add(f"Task {task_id[:8]}... completed with {len(generated)} output(s)", "success", "polling")
+    elif status == "FAILED":
+        log_store.add(f"Task {task_id[:8]}... failed", "error", "polling")
+
     return TaskStatusResponse(
         task_id=data.get("task_id", task_id),
-        status=data.get("status", "UNKNOWN"),
-        generated=data.get("generated", []),
+        status=status,
+        generated=generated,
         category=category,
         model=model,
     )

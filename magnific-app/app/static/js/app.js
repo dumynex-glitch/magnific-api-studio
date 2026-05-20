@@ -545,7 +545,90 @@ document.getElementById("new-task-btn").addEventListener("click", () => {
     hideProgressSection();
 });
 
-document.addEventListener("DOMContentLoaded", loadRegistry);
+document.getElementById("settings-btn").addEventListener("click", openSettings);
+document.getElementById("settings-close-btn").addEventListener("click", closeSettings);
+document.getElementById("settings-overlay").addEventListener("click", closeSettings);
+
+let lastLogId = 0;
+let logPollInterval = null;
+let logPanelExpanded = false;
+
+function startLogPolling() {
+    if (logPollInterval) clearInterval(logPollInterval);
+    fetchLogs();
+    logPollInterval = setInterval(fetchLogs, 1500);
+}
+
+async function fetchLogs() {
+    try {
+        const res = await fetch(`${API_BASE}/api/logs?last_id=${lastLogId}`);
+        const data = await res.json();
+        if (data.entries && data.entries.length > 0) {
+            appendLogEntries(data.entries);
+            lastLogId = data.entries[data.entries.length - 1].id;
+        }
+    } catch (e) {
+        console.error("Log fetch error:", e);
+    }
+}
+
+function appendLogEntries(entries) {
+    const container = document.getElementById("log-entries");
+    const countEl = document.getElementById("log-count");
+    const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+
+    entries.forEach(entry => {
+        const div = document.createElement("div");
+        div.className = "log-entry";
+        const time = new Date(entry.timestamp).toLocaleTimeString();
+        div.innerHTML = `
+            <span class="log-entry-time">${time}</span>
+            <span class="log-entry-level ${entry.level}">${entry.level}</span>
+            <span class="log-entry-category">[${entry.category}]</span>
+            <span class="log-entry-message">${escapeHtml(entry.message)}</span>
+        `;
+        container.appendChild(div);
+    });
+
+    const totalEntries = container.children.length;
+    countEl.textContent = totalEntries;
+
+    if (wasAtBottom || logPanelExpanded) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+document.getElementById("log-toggle-btn").addEventListener("click", () => {
+    logPanelExpanded = !logPanelExpanded;
+    const body = document.getElementById("log-panel-body");
+    const chevron = document.querySelector(".log-chevron");
+    body.style.display = logPanelExpanded ? "block" : "none";
+    chevron.classList.toggle("expanded", logPanelExpanded);
+    if (logPanelExpanded) {
+        const container = document.getElementById("log-entries");
+        container.scrollTop = container.scrollHeight;
+    }
+});
+
+document.getElementById("log-clear-btn").addEventListener("click", async () => {
+    try {
+        await fetch(`${API_BASE}/api/logs/clear`, { method: "POST" });
+    } catch (e) {}
+    document.getElementById("log-entries").innerHTML = "";
+    document.getElementById("log-count").textContent = "0";
+    lastLogId = 0;
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    loadRegistry();
+    startLogPolling();
+});
 
 const MAX_API_KEYS = 5;
 const SETTINGS_STORAGE_KEY = "magnific_api_keys";
@@ -733,7 +816,3 @@ function closeSettings() {
     document.getElementById("settings-overlay").classList.remove("active");
     document.getElementById("settings-panel").classList.remove("active");
 }
-
-document.getElementById("settings-btn").addEventListener("click", openSettings);
-document.getElementById("settings-close-btn").addEventListener("click", closeSettings);
-document.getElementById("settings-overlay").addEventListener("click", closeSettings);

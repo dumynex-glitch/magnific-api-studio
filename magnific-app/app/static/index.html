@@ -75,6 +75,20 @@
                         <button id="new-task-btn" class="btn btn-secondary">New Task</button>
                     </div>
                 </div>
+
+                <div class="log-panel" id="log-panel">
+                    <div class="log-panel-header">
+                        <button id="log-toggle-btn" class="log-toggle-btn">
+                            <svg class="log-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                            <span>Live Log</span>
+                            <span class="log-count" id="log-count">0</span>
+                        </button>
+                        <button id="log-clear-btn" class="log-clear-btn" title="Clear logs">Clear</button>
+                    </div>
+                    <div class="log-panel-body" id="log-panel-body" style="display:none;">
+                        <div class="log-entries" id="log-entries"></div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
