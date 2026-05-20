@@ -6,7 +6,6 @@ import os
 import time
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,37 +14,9 @@ logging.basicConfig(
 
 from app.routes.generate import router as generate_router
 from app.routes.webhooks import router as webhook_router
+from app.log_store import log_store
 
 app = FastAPI(title="Magnific API Studio", version="1.0.0")
-
-
-class LogStore:
-    def __init__(self, max_entries: int = 500):
-        self.entries: list[dict] = []
-        self.max_entries = max_entries
-        self._counter = 0
-
-    def add(self, message: str, level: str = "info", category: str = "system"):
-        self._counter += 1
-        entry = {
-            "id": self._counter,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "level": level,
-            "category": category,
-            "message": message,
-        }
-        self.entries.append(entry)
-        if len(self.entries) > self.max_entries:
-            self.entries = self.entries[-self.max_entries:]
-
-    def get_since(self, last_id: int) -> list[dict]:
-        return [e for e in self.entries if e["id"] > last_id]
-
-    def clear(self):
-        self.entries.clear()
-
-
-log_store = LogStore()
 
 
 class RateLimiter:

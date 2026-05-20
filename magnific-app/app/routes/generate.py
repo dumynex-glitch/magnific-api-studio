@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from app.client import client, MagnificAPIError, MagnificRateLimitError, MagnificTimeoutError
 from app.registry import MODEL_REGISTRY
 from app.models import GenerateRequest, GenerateResponse, TaskStatusRequest, TaskStatusResponse, RegistryResponse, CategoryInfo, ModelInfo
-from app.main import log_store
+from app.log_store import log_store
 
 logger = logging.getLogger(__name__)
 
