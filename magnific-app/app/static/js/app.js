@@ -257,12 +257,15 @@ async function handleSubmit(e) {
             const activeTab = toggle.querySelector(".toggle-tab.active");
             const mode = activeTab ? activeTab.dataset.mode : "url";
 
+            const isInActivePanel = activePanel && activePanel.contains(input);
+            if (!isInActivePanel) continue;
+
             if (mode === "url") {
                 if (input.value) {
                     params[input.name] = input.value;
                 }
             } else {
-                if (input.files.length > 0) {
+                if (input.files && input.files.length > 0) {
                     fileInputs[input.name] = input.files[0];
                 }
             }
