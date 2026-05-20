@@ -118,10 +118,20 @@ function renderForm(schema) {
                     </div>
                     <div class="toggle-content">
                         <div class="toggle-panel active" data-panel="url-${key}">
-                            <input type="url" name="${key}" placeholder="${urlPlaceholder}" ${field.required ? 'required' : ''} class="url-input">
+                            <div class="url-input-row">
+                                <input type="url" name="${key}" placeholder="${urlPlaceholder}" ${field.required ? 'required' : ''} class="url-input">
+                                <button type="button" class="url-verify-btn" data-target="${key}" title="Verify URL is reachable">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    Verify
+                                </button>
+                            </div>
+                            <div class="url-verify-result" data-result="${key}"></div>
                         </div>
                         <div class="toggle-panel" data-panel="file-${key}">
-                            <input type="file" name="${key}" accept="${fileAccept}" class="file-input" data-url-name="${key}">
+                            <div class="file-upload-area" data-field="${key}">
+                                <input type="file" name="${key}" accept="${fileAccept}" class="file-input">
+                                <div class="file-upload-feedback" data-feedback="${key}"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -199,13 +209,102 @@ function initUrlFileToggles(form) {
                 urlInput.required = true;
                 fileInput.required = false;
                 fileInput.value = "";
+                clearFileFeedback(target);
             } else {
                 fileInput.required = true;
                 urlInput.required = false;
                 urlInput.value = "";
+                clearVerifyResult(target);
             }
         });
     });
+
+    form.querySelectorAll(".url-verify-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            const target = btn.dataset.target;
+            const toggle = btn.closest(".url-file-toggle");
+            const urlInput = toggle.querySelector(".url-input");
+            const resultDiv = toggle.querySelector(`.url-verify-result[data-result="${target}"]`);
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                showVerifyResult(resultDiv, "error", "Enter a URL first");
+                return;
+            }
+
+            btn.classList.add("verifying");
+            btn.innerHTML = `<svg class="verify-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking...`;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/verify-url?url=${encodeURIComponent(url)}`);
+                const data = await res.json();
+
+                if (data.ok) {
+                    let details = `HTTP ${data.status_code}`;
+                    if (data.content_type) details += ` · ${data.content_type}`;
+                    if (data.content_length && data.content_length !== "unknown") {
+                        const bytes = parseInt(data.content_length);
+                        if (bytes > 1048576) details += ` · ${(bytes / 1048576).toFixed(1)} MB`;
+                        else if (bytes > 1024) details += ` · ${(bytes / 1024).toFixed(0)} KB`;
+                        else details += ` · ${bytes} B`;
+                    }
+                    showVerifyResult(resultDiv, "success", details);
+                } else {
+                    showVerifyResult(resultDiv, "error", data.error || "URL not reachable");
+                }
+            } catch (err) {
+                showVerifyResult(resultDiv, "error", "Verification failed");
+            }
+
+            btn.classList.remove("verifying");
+            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Verify`;
+        });
+    });
+
+    form.querySelectorAll(".file-input").forEach(input => {
+        input.addEventListener("change", () => {
+            const toggle = input.closest(".url-file-toggle");
+            const fieldKey = toggle.dataset.field;
+            const feedback = toggle.querySelector(`.file-upload-feedback[data-feedback="${fieldKey}"]`);
+
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                const size = file.size;
+                let sizeStr;
+                if (size > 1048576) sizeStr = `${(size / 1048576).toFixed(1)} MB`;
+                else if (size > 1024) sizeStr = `${(size / 1024).toFixed(0)} KB`;
+                else sizeStr = `${size} B`;
+
+                feedback.innerHTML = `
+                    <div class="file-upload-success">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <span class="file-name">${escapeHtml(file.name)}</span>
+                        <span class="file-size">${sizeStr}</span>
+                    </div>
+                `;
+            } else {
+                clearFileFeedback(fieldKey);
+            }
+        });
+    });
+}
+
+function showVerifyResult(div, type, message) {
+    div.className = `url-verify-result ${type}`;
+    div.innerHTML = `<span class="verify-icon">${type === "success" ? "✓" : "✗"}</span><span class="verify-message">${escapeHtml(message)}</span>`;
+}
+
+function clearVerifyResult(fieldKey) {
+    const div = document.querySelector(`.url-verify-result[data-result="${fieldKey}"]`);
+    if (div) {
+        div.className = "url-verify-result";
+        div.innerHTML = "";
+    }
+}
+
+function clearFileFeedback(fieldKey) {
+    const feedback = document.querySelector(`.file-upload-feedback[data-feedback="${fieldKey}"]`);
+    if (feedback) feedback.innerHTML = "";
 }
 
 function updateFieldVisibility() {

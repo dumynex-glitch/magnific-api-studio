@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, JSONResponse
 import os
 import time
 import logging
+import httpx
 from collections import defaultdict
 
 logging.basicConfig(
@@ -17,6 +18,29 @@ from app.routes.webhooks import router as webhook_router
 from app.log_store import log_store
 
 app = FastAPI(title="Magnific API Studio", version="1.0.0")
+
+
+@app.get("/api/verify-url")
+async def verify_url(url: str):
+    log_store.add(f"Verifying URL: {url[:80]}...", "info", "verify")
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.head(url)
+            content_type = resp.headers.get("content-type", "unknown")
+            content_length = resp.headers.get("content-length", "unknown")
+            status = resp.status_code
+            if 200 <= status < 400:
+                log_store.add(f"URL verified: HTTP {status}, {content_type}, {content_length} bytes", "success", "verify")
+                return {"ok": True, "status_code": status, "content_type": content_type, "content_length": content_length}
+            else:
+                log_store.add(f"URL verification failed: HTTP {status}", "error", "verify")
+                return {"ok": False, "status_code": status, "error": f"HTTP {status}"}
+    except httpx.TimeoutException:
+        log_store.add(f"URL verification timeout: {url[:80]}", "error", "verify")
+        return {"ok": False, "error": "Request timed out"}
+    except httpx.RequestError as e:
+        log_store.add(f"URL verification error: {str(e)}", "error", "verify")
+        return {"ok": False, "error": str(e)}
 
 
 class RateLimiter:
